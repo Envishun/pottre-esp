@@ -15,19 +15,29 @@ esphome:
   # configuration and updates.
   project:
     name: envishun.pottre
-    version: "0.1"
+    version: "0.2"
+
+  # Turn on the moisture sensing circuit immediately so that it has time to settle
+  on_boot:
+    priority: 600
+    then:
+      - switch.turn_on: moisture_sensor
 
 esp32:
-  # board: esp32-c3-devkitm-1
   board: seeed_xiao_esp32c3
   framework:
     type: arduino
 
 # To be able to get logs from the device via serial and api.
 logger:
+  level: VERBOSE
 
 # API is a requirement of the dashboard import.
 api:
+  on_client_connected:
+    - logger.log: "Connected, reading sensors"
+    - script.execute: read_sensors
+    - logger.log: "Sensors have been read"
 
 # OTA is required for Over-the-Air updating
 ota:
@@ -53,3 +63,221 @@ esp32_improv:
 # Sets up the improv via serial client for Wi-Fi provisioning
 #improv_serial:
 #  next_url: https://example.com/project-template/manual?ip={{ip_address}}&name={{device_name}}&version={{esphome_version}}
+
+switch:
+  - platform: gpio
+    name: "Pump"
+    id: pump
+    pin:
+      number: GPIO7
+      mode:
+        output: true
+
+  - platform: gpio
+    name: "Battery sensor"
+    id: battery_sensor
+    restore_mode: ALWAYS_OFF
+    inverted: true
+    pin:
+      number: GPIO5
+      mode:
+        output: true
+        open_drain: true
+
+  - platform: gpio
+    name: "Moisture sensor"
+    id: moisture_sensor
+    restore_mode: RESTORE_DEFAULT_OFF
+    pin:
+      number: GPIO6
+      mode:
+        output: true
+
+  - platform: template
+    name: "Deep sleep"
+    id: deep_sleep_enabled
+    restore_mode: RESTORE_DEFAULT_OFF
+    optimistic: true
+    on_turn_on:
+      - deep_sleep.allow: deep_sleep_1
+      - script.execute: read_sensors
+    on_turn_off:
+      - deep_sleep.prevent: deep_sleep_1
+
+button:
+  - platform: template
+    name: Read sensors
+    id: read_sensors_button
+    on_press:
+      - logger.log: "Read sensors now"
+      - script.execute: read_sensors
+
+light:
+  - platform: esp32_rmt_led_strip
+    id: uplights
+    rgb_order: GRB
+    pin: GPIO21
+    num_leds: 1
+    rmt_channel: 1
+    restore_mode: RESTORE_DEFAULT_ON
+    chipset: WS2812
+    name: "Uplights"
+    effects:
+      - addressable_rainbow:
+      - addressable_rainbow:
+          name: Rainbow slow
+          speed: 1
+          width: 25
+      - addressable_twinkle:
+      - addressable_twinkle:
+          name: Twinkle Effect With Custom Values
+          twinkle_probability: 5%
+          progress_interval: 4ms
+      - addressable_random_twinkle:
+      - addressable_random_twinkle:
+          name: Random Twinkle Effect With Custom Values
+          twinkle_probability: 5%
+          progress_interval: 32ms
+      - automation:
+          name: Custom Automation Effect
+          sequence:
+            - light.addressable_set:
+                id: uplights
+                red: 100%
+                green: 100%
+                blue: 100%
+            - delay: 100ms
+            - light.addressable_set:
+                id: uplights
+                range_from: 0
+                range_to: 20
+                red: 100%
+                green: 0%
+                blue: 0%
+
+deep_sleep:
+  id: deep_sleep_1
+
+number:
+  - platform: template
+    id: deep_sleep_duration
+    name: "Deep sleep duration"
+    unit_of_measurement: m
+    optimistic: true
+    restore_value: true
+    min_value: 1
+    max_value: 1440
+    step: 5
+
+binary_sensor:
+  - platform: homeassistant
+    entity_id: input_boolean.pottre_sleep
+    id: pottre_sleep
+
+sensor:
+  - platform: adc
+    pin: GPIO3
+    name: "Battery"
+    id: battery_level
+    attenuation: 11db
+    device_class: battery
+    unit_of_measurement: "%"
+    update_interval: never
+    accuracy_decimals: 0
+    filters:
+      - calibrate_linear:
+          - 1.4 -> 0
+          - 2.05 -> 100
+      - clamp:
+          min_value: 0
+          max_value: 100
+    on_value:
+      then:
+        - logger.log:
+            format: "Battery level: %g / %g"
+            args: [ 'id(battery_level).raw_state', 'id(battery_level).state' ]
+
+  # Moisture: using board A0 pin to read value
+  - platform: adc
+    pin: GPIO2
+    name: "Moisture level"
+    attenuation: 11db
+    id: moisture_level
+    unit_of_measurement: "%"
+    accuracy_decimals: 0
+    update_interval: never
+    filters:
+      - calibrate_linear:
+          - 0.0 -> 0
+          - 1.2 -> 100
+      - clamp:
+          min_value: 0
+          max_value: 100
+    on_value:
+      then:
+        - logger.log:
+            format: "Moisture level voltage: %g / %g"
+            args: [ 'id(moisture_level).raw_state', 'id(moisture_level).state' ]
+
+  # Photoresistor
+  - platform: adc
+    pin: GPIO4
+    name: "Light level"
+    attenuation: 11db
+    id: light_level
+    unit_of_measurement: "%"
+    accuracy_decimals: 0
+    update_interval: never
+    filters:
+      - calibrate_linear:
+          - 0.1 -> 0
+          - 2.7 -> 100
+      - clamp:
+          min_value: 0
+          max_value: 100
+    on_value:
+      then:
+        - logger.log:
+            format: "Light level voltage: %g / %g"
+            args: [ 'id(light_level).raw_state', 'id(light_level).state' ]
+
+script:
+  - id: read_sensors
+    then:
+      - delay: 1s
+      - logger.log: "Measuring light level..."
+      - component.update: light_level
+      - delay: 1s
+      - logger.log: "Measuring moisture level..."
+      - switch.turn_on: moisture_sensor
+      - component.update: moisture_level
+      - switch.turn_off: moisture_sensor
+      - logger.log: "Measuring battery level..."
+      - switch.turn_on: battery_sensor
+      - delay: 1s
+      - component.update: battery_level
+      - switch.turn_off: battery_sensor
+      - logger.log:
+          format: "Deep sleep duration: %g"
+          args: [ 'id(deep_sleep_duration).state' ]
+      - if:
+          condition:
+            - lambda: return id(pottre_sleep).state;
+          then:
+            - logger.log: "Sleepy time"
+
+            - light.turn_on: uplights
+            - delay: 1s
+            - light.turn_off: uplights
+            - delay: 1s
+            - light.turn_on: uplights
+            - delay: 1s
+            - light.turn_off: uplights
+            - delay: 1s
+            - light.turn_off: uplights
+
+            - deep_sleep.enter:
+                id: deep_sleep_1
+                sleep_duration: !lambda 'return id(deep_sleep_duration).state * 60 * 1000;'
+          else:
+            - logger.log: "No sleepy time"
