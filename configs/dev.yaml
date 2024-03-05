@@ -15,7 +15,7 @@ esphome:
   # configuration and updates.
   project:
     name: envishun.pottre
-    version: "0.2"
+    version: "0.3"
 
   # Turn on the moisture sensing circuit immediately so that it has time to settle
   on_boot:
@@ -69,7 +69,7 @@ switch:
     name: "Pump"
     id: pump
     pin:
-      number: GPIO7
+      number: GPIO10
       mode:
         output: true
 
@@ -116,7 +116,7 @@ light:
   - platform: esp32_rmt_led_strip
     id: uplights
     rgb_order: GRB
-    pin: GPIO21
+    pin: GPIO9
     num_leds: 1
     rmt_channel: 1
     restore_mode: RESTORE_DEFAULT_ON
@@ -176,7 +176,7 @@ binary_sensor:
 
 sensor:
   - platform: adc
-    pin: GPIO3
+    pin: GPIO4
     name: "Battery"
     id: battery_level
     attenuation: 11db
@@ -199,7 +199,7 @@ sensor:
 
   # Moisture: using board A0 pin to read value
   - platform: adc
-    pin: GPIO2
+    pin: GPIO5
     name: "Moisture level"
     attenuation: 11db
     id: moisture_level
@@ -207,6 +207,7 @@ sensor:
     accuracy_decimals: 0
     update_interval: never
     filters:
+      # TODO: potential substitution for calibration
       - calibrate_linear:
           - 0.0 -> 0
           - 1.2 -> 100
@@ -221,7 +222,7 @@ sensor:
 
   # Photoresistor
   - platform: adc
-    pin: GPIO4
+    pin: GPIO3
     name: "Light level"
     attenuation: 11db
     id: light_level
@@ -257,6 +258,7 @@ script:
       - delay: 1s
       - component.update: battery_level
       - switch.turn_off: battery_sensor
+      - delay: 1s
       - logger.log:
           format: "Deep sleep duration: %g"
           args: [ 'id(deep_sleep_duration).state' ]
