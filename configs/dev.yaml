@@ -15,7 +15,7 @@ esphome:
   # configuration and updates.
   project:
     name: envishun.pottre
-    version: "0.3"
+    version: "0.3.2"
 
   # Turn on the moisture sensing circuit immediately so that it has time to settle
   on_boot:
@@ -79,7 +79,7 @@ switch:
     restore_mode: ALWAYS_OFF
     inverted: true
     pin:
-      number: GPIO5
+      number: GPIO7
       mode:
         output: true
         open_drain: true
