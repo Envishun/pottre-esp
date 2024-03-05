@@ -199,7 +199,7 @@ sensor:
 
   # Moisture: using board A0 pin to read value
   - platform: adc
-    pin: GPIO5
+    pin: GPIO2
     name: "Moisture level"
     attenuation: 11db
     id: moisture_level
